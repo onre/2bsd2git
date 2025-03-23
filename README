@@ -1,1 +1,5 @@
-utilities for automatic processing of 2BSD patches into git commits
+2bsd2git - utilities for automatic processing of 2BSD patches into git commits
+
+$ gcc -o patchsplit patchsplit.c
+$ ./patch2commit.sh patches/453
+
