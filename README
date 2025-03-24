@@ -1,5 +1,35 @@
-2bsd2git - utilities for automatic processing of 2BSD patches into git commits
+2bsd2git
+~~~~~~~~
+small utilities for automatic processing of 2.11-BSD patches into git
+commits.
 
-$ gcc -o patchsplit patchsplit.c
-$ ./patch2commit.sh patches/453
+status
+~~~~~~
+works from pl431 to 459. 
 
+quick guide
+~~~~~~~~~~~
+from zero to repo:
+
+$ make
+
+run one patch only:
+
+$ make PATCH=460 singleshot
+
+longer explanation
+~~~~~~~~~~~~~~~~~~
+make all does the following:
+
+- rsync 2.11-BSD from TUHS
+- extract the root dump and file[678].tar.gz into a directory
+- remove binaries
+- create a git commit from this, using VERSION file as the message and
+  its timestamp as the commit date
+- unpack patches into a separate directory
+- start applying patches one by one, using the patch file date as the commit
+  date
+
+license
+~~~~~~~
+MIT license applies, see the file LICENSE for more information.
