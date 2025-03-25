@@ -48,9 +48,8 @@ _AUTO_RESET=true
 
 # options to 'patch' command.  
 
-#_PATCH_FLAGS="--dry-run"		# GNU
-#_PATCH_FLAGS="--check"			# BSD
-_PATCH_FLAGS="-s -F 3 -l -V none"
+# silent, never reverse, more fuzz, ignore whitespace, no backups
+_PATCH_FLAGS="-s -N -F 3 -l -V none"
 
 # code begins.
 
@@ -192,15 +191,20 @@ cleanup_dir "${_WORK_DIR}"
 reset_repo
 cleanup_orig_rej "${_ROOT_DIR}"
 
-# -v makes patchsplit look for '*** VERSION.orig' instead of 'cut here'
+# some postings don't have a 'cut here' line to separate the message
+# from the patch. the -v option makes patchsplit look for the string
+# '*** VERSION.orig' instead of 'cut here'
 if [ "${_PATCH_NUM}" -eq 448 ]; then
     _PATCHSPLIT="${_PATCHSPLIT} -v"
 fi
 
 if ! ${_PATCHSPLIT} "${_ORIG_PATCH_FILE}" \
      "${_MESSAGE_FILE}" "${_PATCH_FILE}"; then
+    
     # TODO: this special case could be handled differently, elsewhere
+    
     if [ "${_PATCH_NUM}" -eq 437 ]; then
+	
 	# 437 is a placeholder without diff, but we'll create the
 	# branch and commit nonetheless
 
@@ -233,23 +237,40 @@ if ! git checkout -B "${_GIT_BRANCH}" 1>&2 2>> "${_PATCH_LOG_FILE}"; then
     fail "could not checkout ${_GIT_BRANCH}, see ${_PATCH_LOG_FILE}"
 fi
 
-
-if file "${_PATCH_FILE}" | grep -q 'context diff output'; then
+# NetBSD file(1) fails to identify some diffs...
+if file "${_PATCH_FILE}" | grep -q 'context diff output' \
+    || head -1 "${_PATCH_FILE}" | grep -q '^*** ./' ; then
     stderr_echo "patch #${_PATCH_NUM} is a context diff"
     if grep -q '^*** /' "${_PATCH_FILE}"; then
 	diff_to_relative_path "${_PATCH_FILE}"
     fi
     stderr_echo "applying patch #${_PATCH_NUM} to ${_ROOT_DIR}"
-    diff_apply "${_PATCH_FILE}"
+
+    # PER-PATCH ALLOWED FAILURES GO HERE
+    case  "${_PATCH_NUM}" in
+	445)
+
+	    # this one is already patched on the pl431 dist at TUHS,
+	    # probably because of the reasons mentioned in the patch
+	    # message.
+	    
+	    diff_apply "${_PATCH_FILE}" "usr/src/local/mp/Makefile"
+	    ;;
+	*)
+	    diff_apply "${_PATCH_FILE}"
+	    ;;
+    esac
 elif file "${_PATCH_FILE}" | grep -q 'POSIX shell script'; then
     stderr_echo "patch #${_PATCH_NUM} is a shell archive,"\
 		"running it in ${_WORK_DIR}"
     cd "${_WORK_DIR}"
 
-    # the only way of getting 2BSD shell archives to not try to expand
-    # parameters in the here-document part was to use ksh with the -u
-    # option and additionally enclose the here-doc EOF marker in
-    # quotes, as instructed in the ksh(1) manual page.
+    # the only way of getting some of the older 2BSD patch shell
+    # archives to not try to expand parameters in the here-document
+    # part was to use ksh with the -u option and additionally enclose
+    # the here-doc EOF marker in quotes, as instructed in the ksh(1)
+    # manual page. later ones seem to have used \SHAR_EOF and wouldn't
+    # need this, but ... it does not break anything?
 
     _T=$(mktemp)
     sed "s,<< SHAR_EOF >,<< 'SHAR_EOF' >,g" < "${_PATCH_FILE}" > "${_T}"
@@ -257,7 +278,7 @@ elif file "${_PATCH_FILE}" | grep -q 'POSIX shell script'; then
     rm -f "${_T}"
     ksh -us < "${_PATCH_FILE}"
 
-    # PER-PATCH SPECIAL APPLICATION STEPS ARE HERE
+    # PER-PATCH SPECIAL RECIPES FOR SHELL ARCHIVE PATCHES ARE HERE
     case "${_PATCH_NUM}" in
 	432)
 	    script_to_relative_path 432.sh 432.rm
@@ -297,13 +318,32 @@ elif file "${_PATCH_FILE}" | grep -q 'POSIX shell script'; then
 	    git rm "${_ROOT_DIR}/usr/src/asm.sed*"
 	    git rm -r "${_ROOT_DIR}/usr/src/include"
 	    stderr_echo "applying patch #${_PATCH_NUM} to ${_ROOT_DIR}"
+	    diff_apply "${_WORK_DIR}"/459.patch
+	    ;;
+	460)
+	    uudecode cpp.tar.Z.uu
+	    uncompress cpp.tar.Z
+	    cd "${_ROOT_DIR}"
+	    stderr_echo "performing patch #460 actions"
+	    diff_apply "${_WORK_DIR}"/ccom.patch
+	    tar xpf "${_WORK_DIR}"/cpp.tar
+	    diff_apply "${_WORK_DIR}"/src.patch
+	    ;;
+	465)
+	    stderr_echo "performing patch #465 actions"
+	    script_to_relative_path "${_WORK_DIR}/top.shar"
+	    cd "${_ROOT_DIR}"
+	    sh "${_WORK_DIR}/top.shar"
+	    diff_apply "${_WORK_DIR}"/465.patch
 	    ;;
 	*)
+	    stderr_echo "***"
 	    stderr_echo "no special recipe for #${_PATCH_NUM}, trying the"\
 			"easy way - this only applies the patch"
 	    stderr_echo "check the patch notes at ${_MESSAGE_FILE}"
 	    stderr_echo "and, if necessary, add the recipe to patch2commit.sh"\
 			"(search for PER-PATCH)"
+	    stderr_echo "***"
 
 	    is_existent "${_WORK_DIR}/${_PATCH_NUM}"?"patch"
 	    
@@ -314,6 +354,11 @@ elif file "${_PATCH_FILE}" | grep -q 'POSIX shell script'; then
 	    diff_apply "${_WORK_DIR}/${_PATCH_NUM}"?"patch"
 	    ;;
     esac
+elif file "${_PATCH_FILE}" | grep -q 'uuencoded text.*\.tar\.'; then
+        stderr_echo "patch #${_PATCH_NUM} is an uuencoded tape archive,"
+	stderr_echo "extracting it to ${_ROOT_DIR}"
+	cd "${_ROOT_DIR}"
+	uudecode < "${_PATCH_FILE}" | uncompress | tar xvpf -
 else
     stderr_echo "don't know what to do with this file:"
     file "${_PATCH_FILE}" 1>&2
@@ -321,7 +366,7 @@ else
 fi
 
 cleanup_orig_rej "${_ROOT_DIR}"
-
+git add "${_ROOT_DIR}"
 stderr_echo "patch applied cleanly, committing"
 cd "${_ROOT_DIR}"
 if ! git commit --cleanup=whitespace -aF "${_MESSAGE_FILE}"\

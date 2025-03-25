@@ -29,8 +29,8 @@ if [ -z "${1}" ] || [ -z "${2}" ]; then
     usage
 fi
 
-_DIST_DIR="${_CWD}/${1}"
-_ROOT_DIR="${_CWD}/${2}"
+_DIST_DIR="${1}"
+_ROOT_DIR="${2}"
 
 shift
 shift
