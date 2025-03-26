@@ -2,14 +2,14 @@
 
 usage()
 {
-    stderr_echo "usage: ${0} distdir rootdir"
-    stderr_echo
-    stderr_echo "creates a directory structure mostly similar to an actual 2.11-BSD install"
-    stderr_echo "for the purpose of being used as the base commit of a git repository."
-    stderr_echo
-    stderr_echo "  distdir       the location of 2.11-BSD distribution files"
-    stderr_echo "  rootdir       where to create the root tree and repository"
-    stderr_echo
+    ee "usage: ${0} distdir rootdir"
+    ee
+    ee "creates a directory structure mostly similar to an actual 2.11-BSD install"
+    ee "for the purpose of being used as the base commit of a git repository."
+    ee
+    ee "  distdir       the location of 2.11-BSD distribution files"
+    ee "  rootdir       where to create the root tree and repository"
+    ee
     exit 1
 }
 
@@ -50,13 +50,13 @@ is_readable_dir "${_DIST_DIR}"
 _ROOTDUMP="${_DIST_DIR}/root.afio.gz"
 is_readable "${_ROOTDUMP}"
 
-stderr_echo_nonl "extracting root dump... "
+ee_nonl "extracting root dump... "
 
 cd "${_ROOT_DIR}"
 
 gzcat "${_ROOTDUMP}" | cpio -idm > /dev/null 2>&1
 
-stderr_echo "done."
+ee "done."
 
 # quick sanity check
 is_directory "${_ROOT_DIR}"/bin
@@ -71,29 +71,29 @@ mkdir -p "${_SRC_DIR}" > /dev/null
 is_writable_dir "${_USR_DIR}"
 is_writable_dir "${_SRC_DIR}"
 
-stderr_echo_nonl "extracting file6... "
+ee_nonl "extracting file6... "
 tar -C "${_USR_DIR}" -xzf "${_FILE6}"
-stderr_echo "done."
+ee "done."
 
-stderr_echo_nonl "extracting file7... "
+ee_nonl "extracting file7... "
 tar -C "${_SRC_DIR}" -xzf "${_FILE7}" 
-stderr_echo "done."
+ee "done."
 
-stderr_echo_nonl "extracting file8... "
+ee_nonl "extracting file8... "
 tar -C "${_SRC_DIR}" -xzf "${_FILE8}" 
-stderr_echo "done."
+ee "done."
 
 chmod -R u+w "${_ROOT_DIR}"
 
 _EXECUTABLES=$(mktemp)
 
-stderr_echo_nonl "cleaning up binaries... "
+ee_nonl "cleaning up binaries... "
 find "${_ROOT_DIR}" -type f -perm -0100 > "${_EXECUTABLES}"
 for _file in $(cat "${_EXECUTABLES}"); do
     chmod u+r "${_file}"
     file "${_file}"
 done | grep 'PDP-11.*executable' | cut -d: -f1 | xargs rm -f
-stderr_echo "done."
+ee "done."
 
 rm -f "${_ROOT_DIR}"/lib/crt0.o \
    "${_ROOT_DIR}"/lib/mcrt0.o \
@@ -105,7 +105,7 @@ get_version
 now_at
 
 _PATCH_NUM="${_VERSION}"
-_GIT_BRANCH="${_GIT_BRANCH_SUFFIX}${_PATCH_NUM}"
+_GIT_BRANCH="${_GIT_BRANCH_PREFIX}${_PATCH_NUM}"
 
 cd "${_ROOT_DIR}"
 

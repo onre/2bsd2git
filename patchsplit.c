@@ -74,12 +74,15 @@ int main(int argc, char **argv) {
 	eprintf("something is amiss - 0 message lines\n");
 	exit(-2);
     }
+#ifdef VERBOSE
     if (!difflines) {
-	eprintf("something is amiss - 0 diff lines\n");
-	exit(-3);
+	eprintf("%s: %ld lines\nno diff found\n",
+		argv[2], msglines);
+    } else {
+	eprintf("%s: %ld lines\n%s: %ld lines\n",
+		argv[2], msglines,
+		argv[3], difflines);
     }
-    eprintf("%s: %ld lines\n%s: %ld lines\n",
-	    argv[2], msglines,
-	    argv[3], difflines);
+#endif
     return 0;
 }

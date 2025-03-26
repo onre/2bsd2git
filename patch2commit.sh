@@ -47,9 +47,16 @@ _PATCH_LOG_FILE="${_WORK_DIR}/patch.log"
 _AUTO_RESET=true
 
 # options to 'patch' command.  
+if [ -z "${V}" ] || [ "${V}" -eq 0 ] ; then
+    # silent, never reverse, more fuzz, ignore whitespace, no backups
+    _PATCH_FLAGS="-s -N -F 3 -l -V none"
+else
+    # same but not silent
+    _PATCH_FLAGS="-N -F 3 -l -V none"
+fi
 
-# silent, never reverse, more fuzz, ignore whitespace, no backups
-_PATCH_FLAGS="-s -N -F 3 -l -V none"
+# options to git commit. patch 437 adds --allow-empty to this.
+_GIT_COMMIT_FLAGS=""
 
 # code begins.
 
@@ -61,12 +68,12 @@ fi
 . "${_SCRIPT_DIR}/common.sh"
 
 # naming convention for per-patch branches.
-_GIT_BRANCH="${_GIT_BRANCH_SUFFIX}${_PATCH_NUM}"
+_GIT_BRANCH="${_GIT_BRANCH_PREFIX}${_PATCH_NUM}"
 
 # show some kind of help and give up
 usage()
 {
-    stderr_echo "usage: ${0} patch"
+    ee "usage: ${0} patch"
     exit 1
 }
 
@@ -74,7 +81,8 @@ usage()
 cleanup_orig_rej()
 {
     is_writable_dir "${1}"
-    find "${1}" -name \*.orig -exec rm {} \; -or -name \*.rej -exec rm {} \;
+    find "${1}" -name \*.orig -exec rm {} \; -or -name \*.rej \
+	 -exec rm {} \; > /dev/null 2>&1
 }
 
 # delete the file
@@ -82,7 +90,7 @@ cleanup_orig_rej()
 cleanup_file()
 {
     if [ -f "${1}" ]; then
-	stderr_echo "cleaning up ${1}"
+	vee "cleaning up ${1}"
 	if ! rm -f "${1}"; then
 	    fail "could not remove ${1}"
 	fi 
@@ -115,8 +123,8 @@ reset_repo()
     if ${_AUTO_RESET}; then
 	_prevdir=$(pwd)
 	cd "${_ROOT_DIR}"
-	_prevbranch="${_GIT_BRANCH_SUFFIX}$((_PATCH_NUM - 1))"
-	stderr_echo "checking out ${_prevbranch} and resetting"
+	_prevbranch="${_GIT_BRANCH_PREFIX}$((_PATCH_NUM - 1))"
+	vee "checking out ${_prevbranch} and resetting"
 	if ! git checkout "${_prevbranch}" \
 	     2>> "${_PATCH_LOG_FILE}" 1>&2; then
 	    fail "could not checkout ${_prevbranch}"
@@ -131,16 +139,17 @@ reset_repo()
 
 # apply a diff to the tree
 # $1 the diff file
-# $2 ignore failure for this path
+# $2 ignore failure for this particular file
 diff_apply()
 {
     if ! patch ${_PATCH_FLAGS} -p0 < "${1}" \
 	 1>&2 2>> "${_PATCH_LOG_FILE}"; then
 	if [ -z "${2}" ]; then
+	    echo $?
 	    fail "patch failed to apply, see ${_PATCH_LOG_FILE}"
 	else
 	    if [ $(grep -c "${2}" "${_PATCH_LOG_FILE}") -eq 1 ]; then
-		stderr_echo "expected failure for ${2} ignored"
+		ee "expected failure for ${2} ignored"
 	    fi
 	fi
     fi
@@ -151,7 +160,7 @@ script_to_relative_path()
 {
     _T=$(mktemp)
     for _script in "$@"; do
-	stderr_echo "altering ${_script} to use relative paths"
+	vee "altering ${_script} to use relative paths"
 	sed s,/usr/,usr/,g < "${_script}" > "${_T}"
 	cat "${_T}" > "${_script}"
     done
@@ -163,7 +172,7 @@ diff_to_relative_path()
 {
     _T=$(mktemp)
     for _diff in "$@"; do
-	stderr_echo "altering ${_diff} to use relative paths"
+	vee "altering ${_diff} to use relative paths"
 	sed "s,--- /,--- ,g" < "${_diff}" > "${_T}"
 	sed "s,\*\*\* /,*** ,g" < "${_T}" > "${_diff}"
     done
@@ -173,10 +182,6 @@ diff_to_relative_path()
 if [ -z "${1}" ]; then
     usage
 fi
-
-stderr_echo "_ROOT_DIR=${_ROOT_DIR}"
-stderr_echo "_PATCH_DIR=${_PATCH_DIR}"
-stderr_echo "_WORK_DIR=${_WORK_DIR}"
 
 is_executable "${_PATCHSPLIT}"
 
@@ -200,39 +205,12 @@ fi
 
 if ! ${_PATCHSPLIT} "${_ORIG_PATCH_FILE}" \
      "${_MESSAGE_FILE}" "${_PATCH_FILE}"; then
-    
-    # TODO: this special case could be handled differently, elsewhere
-    
-    if [ "${_PATCH_NUM}" -eq 437 ]; then
-	
-	# 437 is a placeholder without diff, but we'll create the
-	# branch and commit nonetheless
-
-	cd "${_ROOT_DIR}"
-	
-	stderr_echo "nothing is really amiss, 437 is a placeholder w/o diff"
-	stderr_echo "creating git branch ${_GIT_BRANCH}"
-	if ! git checkout -B "${_GIT_BRANCH}" \
-	     1>&2 2>> "${_PATCH_LOG_FILE}"; then
-	    fail "could not checkout ${_GIT_BRANCH}, see ${_PATCH_LOG_FILE}"
-	fi
-	if ! git commit --allow-empty --cleanup=whitespace \
-	     -aF "${_MESSAGE_FILE}"\
-	     2>> "${_PATCH_LOG_FILE}" 1>&2; then
-	    fail "could not commit changes, see ${_PATCH_LOG_FILE}"
-	fi
-	stderr_echo "all done"
-
-	exit 0
-    else
-	# patchsplit should produce an error message with enough information
-	exit $?
-    fi
+    exit $?
 fi
 
 cd "${_ROOT_DIR}"
 
-stderr_echo "creating git branch ${_GIT_BRANCH}"
+vee "creating git branch ${_GIT_BRANCH}"
 if ! git checkout -B "${_GIT_BRANCH}" 1>&2 2>> "${_PATCH_LOG_FILE}"; then
     fail "could not checkout ${_GIT_BRANCH}, see ${_PATCH_LOG_FILE}"
 fi
@@ -240,11 +218,12 @@ fi
 # NetBSD file(1) fails to identify some diffs...
 if file "${_PATCH_FILE}" | grep -q 'context diff output' \
     || head -1 "${_PATCH_FILE}" | grep -q '^*** ./' ; then
-    stderr_echo "patch #${_PATCH_NUM} is a context diff"
+
+    vee "patch #${_PATCH_NUM} is a context diff"
     if grep -q '^*** /' "${_PATCH_FILE}"; then
 	diff_to_relative_path "${_PATCH_FILE}"
     fi
-    stderr_echo "applying patch #${_PATCH_NUM} to ${_ROOT_DIR}"
+    vee "applying patch #${_PATCH_NUM} to ${_ROOT_DIR}"
 
     # PER-PATCH ALLOWED FAILURES GO HERE
     case  "${_PATCH_NUM}" in
@@ -256,13 +235,27 @@ if file "${_PATCH_FILE}" | grep -q 'context diff output' \
 	    
 	    diff_apply "${_PATCH_FILE}" "usr/src/local/mp/Makefile"
 	    ;;
+	475)
+
+	    # no idea what happened here. 'Current' is '$urrent' from
+	    # 470 to 474...
+
+	    _T=$(mktemp)
+	    sed 's,Current Patch Level: 474,$urrent Patch Level: 474,' \
+		< "${_PATCH_FILE}" > "${_T}"
+	    cat "${_T}" > "${_PATCH_FILE}"
+	    rm -f "${_T}"
+	    diff_apply "${_PATCH_FILE}"
+	    ;;
 	*)
 	    diff_apply "${_PATCH_FILE}"
 	    ;;
     esac
+
 elif file "${_PATCH_FILE}" | grep -q 'POSIX shell script'; then
-    stderr_echo "patch #${_PATCH_NUM} is a shell archive,"\
-		"running it in ${_WORK_DIR}"
+
+    vee "patch #${_PATCH_NUM} is a shell archive,"\
+	"running it in ${_WORK_DIR}"
     cd "${_WORK_DIR}"
 
     # the only way of getting some of the older 2BSD patch shell
@@ -279,6 +272,10 @@ elif file "${_PATCH_FILE}" | grep -q 'POSIX shell script'; then
     ksh -us < "${_PATCH_FILE}"
 
     # PER-PATCH SPECIAL RECIPES FOR SHELL ARCHIVE PATCHES ARE HERE
+    #
+    # at this point the shell archive has been extracted into
+    # ${_WORK_DIR}, which is also the current working directory.
+    
     case "${_PATCH_NUM}" in
 	432)
 	    script_to_relative_path 432.sh 432.rm
@@ -286,22 +283,60 @@ elif file "${_PATCH_FILE}" | grep -q 'POSIX shell script'; then
 
 	    cd "${_ROOT_DIR}"
 	    
-	    stderr_echo "running script 432.sh"
+	    vee "following the recipe for patch #432"
+	    vee "running script 432.sh"
 	    sh "${_WORK_DIR}"/432.sh
-	    stderr_echo "running script 432.rm"
+	    vee "running script 432.rm"
 	    sh "${_WORK_DIR}"/432.rm
 	    
-	    stderr_echo "applying patch #${_PATCH_NUM} to ${_ROOT_DIR}"
+	    vee "applying patch #${_PATCH_NUM} to ${_ROOT_DIR}"
 	    sed 's,X!,\\\n!,g' < "${_WORK_DIR}"/432.patch > "${_T}"
 	    cat "${_T}" > "${_WORK_DIR}"/432.patch
 	    diff_apply "${_WORK_DIR}"/432.patch
 	    ;;
+	440)
+	    diff_to_relative_path 440.patch
+
+	    cd "${_ROOT_DIR}"
+
+	    # skipping the binary copying step deliberately
+	    
+	    vee "following the recipe for patch #440"
+	    vee "applying patch #${_PATCH_NUM} to ${_ROOT_DIR}"
+	    diff_apply "${_WORK_DIR}"/440.patch
+	    ;;
+	441)
+	    script_to_relative_path 441.sh
+	    script_to_relative_path 441.shar
+	    diff_to_relative_path 441.patch
+
+	    cd "${_ROOT_DIR}"
+	    
+	    vee "following the recipe for patch #441"
+	    sh "${_WORK_DIR}"/441.sh
+	    ksh -us < "${_WORK_DIR}"/441.shar
+	    vee "applying patch #${_PATCH_NUM} to ${_ROOT_DIR}"
+	    diff_apply "${_WORK_DIR}"/441.patch
+	    ;;
+	442)
+	    script_to_relative_path 442.shar
+	    diff_to_relative_path 442.patch
+
+	    cd "${_ROOT_DIR}"
+	    
+	    vee "following the recipe for patch #442"
+	    vee "extracting 442.shar"
+	    ksh -us < "${_WORK_DIR}"/442.shar
+	    vee "applying patch #${_PATCH_NUM} to ${_ROOT_DIR}"
+	    diff_apply "${_WORK_DIR}"/442.patch
+	    ;;
 	452)
 	    _T=$(mktemp)
 	    cd "${_ROOT_DIR}"
-	    stderr_echo "running script 452-rm"
+	    vee "following the recipe for patch #452"
+	    vee "running script 452-rm"
 	    sh "${_WORK_DIR}"/452-rm
-	    stderr_echo "applying patch #${_PATCH_NUM} to ${_ROOT_DIR}"
+	    vee "applying patch #${_PATCH_NUM} to ${_ROOT_DIR}"
 	    sed 's,X!,\\\n!,g' < "${_WORK_DIR}"/452-diffs > "${_T}"
 	    cat "${_T}" > "${_WORK_DIR}"/452-diffs
 	    diff_apply "${_WORK_DIR}"/452-diffs "usr/src/share/lint/llib-lc"
@@ -310,68 +345,114 @@ elif file "${_PATCH_FILE}" | grep -q 'POSIX shell script'; then
 	459)
 	    _T=$(mktemp)
 	    cd "${_ROOT_DIR}"
-	    stderr_echo "performing patch #459 actions"
-	    install -c -m 444 -o root -g wheel "${_WORK_DIR}/stdarg.h" \
-		    "${_ROOT_DIR}/usr/include"
+	    vee "following the recipe for patch #459"
+	    cp "${_WORK_DIR}/stdarg.h" \
+	       "${_ROOT_DIR}/usr/include"
 	    git rm -r "${_ROOT_DIR}/usr/include/vaxuba"
 	    git rm -r "${_ROOT_DIR}/usr/include/sys/vaxuba"
 	    git rm "${_ROOT_DIR}/usr/src/asm.sed*"
 	    git rm -r "${_ROOT_DIR}/usr/src/include"
-	    stderr_echo "applying patch #${_PATCH_NUM} to ${_ROOT_DIR}"
+	    vee "applying patch #${_PATCH_NUM} to ${_ROOT_DIR}"
 	    diff_apply "${_WORK_DIR}"/459.patch
 	    ;;
 	460)
-	    uudecode cpp.tar.Z.uu
-	    uncompress cpp.tar.Z
 	    cd "${_ROOT_DIR}"
-	    stderr_echo "performing patch #460 actions"
+	    vee "following the recipe for patch #460"
 	    diff_apply "${_WORK_DIR}"/ccom.patch
-	    tar xpf "${_WORK_DIR}"/cpp.tar
-	    diff_apply "${_WORK_DIR}"/src.patch
+	    uudecode -p < "${_WORK_DIR}/cpp.tar.Z.uu" | uncompress | tar xpf -
+	    diff_apply "${_WORK_DIR}"/src.patch "./usr/src/sys/pdp/net_csv.s"
 	    ;;
 	465)
-	    stderr_echo "performing patch #465 actions"
+	    vee "following the recipe for patch #465"
 	    script_to_relative_path "${_WORK_DIR}/top.shar"
 	    cd "${_ROOT_DIR}"
 	    sh "${_WORK_DIR}/top.shar"
 	    diff_apply "${_WORK_DIR}"/465.patch
 	    ;;
+	471)
+	    vee "following the recipe for patch #471"
+	    cd "${_ROOT_DIR}"
+	    uudecode -p < "${_WORK_DIR}"/471.uu | uncompress | tar xvpf -
+	    chmod u+w usr/src/ucb/more/more.c
+	    diff_apply "${_WORK_DIR}"/471.diffs
+	    ;;
 	*)
-	    stderr_echo "***"
-	    stderr_echo "no special recipe for #${_PATCH_NUM}, trying the"\
-			"easy way - this only applies the patch"
-	    stderr_echo "check the patch notes at ${_MESSAGE_FILE}"
-	    stderr_echo "and, if necessary, add the recipe to patch2commit.sh"\
-			"(search for PER-PATCH)"
-	    stderr_echo "***"
+	    ee "*** no special recipe for #${_PATCH_NUM}, trying the"\
+			"easy way"
+	    ee "*** check the patch notes at ${_MESSAGE_FILE}"
+	    ee "*** and, if necessary, add the recipe to patch2commit.sh"
 
-	    is_existent "${_WORK_DIR}/${_PATCH_NUM}"?"patch"
-	    
-	    diff_to_relative_path "${_WORK_DIR}/${_PATCH_NUM}"?"patch"
+	    if [ -r "${_WORK_DIR}/${_PATCH_NUM}-patch" ]; then
+		_SUB_PATCH_FILE="${_WORK_DIR}/${_PATCH_NUM}-patch"
+	    elif [ -r "${_WORK_DIR}/${_PATCH_NUM}.patch" ]; then
+		_SUB_PATCH_FILE="${_WORK_DIR}/${_PATCH_NUM}.patch"
+	    elif [ -r "${_WORK_DIR}/${_PATCH_NUM}.diffs" ]; then
+		_SUB_PATCH_FILE="${_WORK_DIR}/${_PATCH_NUM}.diffs"
+	    else
+		ee "tried ${_PATCH_NUM}-patch, ${_PATCH_NUM}.patch or ${_PATCH_NUM}.diffs,"
+		fail "but none matched - see the notes and write a recipe."
+	    fi
+		
+	    diff_to_relative_path "${_SUB_PATCH_FILE}"
 
 	    cd "${_ROOT_DIR}"
 
-	    diff_apply "${_WORK_DIR}/${_PATCH_NUM}"?"patch"
+	    diff_apply "${_SUB_PATCH_FILE}"
 	    ;;
     esac
-elif file "${_PATCH_FILE}" | grep -q 'uuencoded text.*\.tar\.'; then
-        stderr_echo "patch #${_PATCH_NUM} is an uuencoded tape archive,"
-	stderr_echo "extracting it to ${_ROOT_DIR}"
-	cd "${_ROOT_DIR}"
-	uudecode < "${_PATCH_FILE}" | uncompress | tar xvpf -
+    
+elif file "${_PATCH_FILE}" | grep -q 'uuencoded text.*\.tar\.Z"'; then
+
+    # this one sorely needs some sort of "confirmation mechanism"
+    
+    ee "*** patch #${_PATCH_NUM} is an uuencoded tape archive,"
+    ee "*** extracting it to ${_ROOT_DIR}"
+    cd "${_ROOT_DIR}"
+    uudecode -p < "${_PATCH_FILE}" | uncompress | tar xvpf -
+    
+elif [ "${_PATCH_NUM}" -eq 437 ]; then
+	
+    # 437 is a placeholder without diff, but we'll create the
+    # branch and commit nonetheless
+    
+    vee "patch #437 is a placeholder w/o diff, committing only the message"
+
+    _GIT_COMMIT_FLAGS="${_GIT_COMMIT_FLAGS} --allow-empty"
+    
+elif [ "${_PATCH_NUM}" -eq 470 ]; then
+
+    # this is an interesting one, see the patch message.
+    
+    vee "following the recipe for patch #470"
+
+    cd "${_WORK_DIR}"
+
+    uudecode -p < "${_PATCH_FILE}" | tar xvpf -
+
+    # oversimplifying, but git does not save file ownership information.
+    
+    cp -p "${_WORK_DIR}/makewhatis.sed" \
+       "${_ROOT_DIR}/usr/src/man"
+
+    cd "${_ROOT_DIR}"
+
+    diff_apply "${_WORK_DIR}/470.patch"
+    
 else
-    stderr_echo "don't know what to do with this file:"
+    
+    ee "don't know what to do with this file:"
     file "${_PATCH_FILE}" 1>&2
     fail "add a recipe to patch2commit.sh and try again."
+    
 fi
 
 cleanup_orig_rej "${_ROOT_DIR}"
 git add "${_ROOT_DIR}"
-stderr_echo "patch applied cleanly, committing"
+ee "patch #${_PATCH_NUM} applied cleanly, committing"
 cd "${_ROOT_DIR}"
-if ! git commit --cleanup=whitespace -aF "${_MESSAGE_FILE}"\
-     2>> "${_PATCH_LOG_FILE}" 1>&2; then
+if ! git commit ${_GIT_COMMIT_FLAGS} --cleanup=whitespace \
+     -aF "${_MESSAGE_FILE}" 2>> "${_PATCH_LOG_FILE}" 1>&2; then
     fail "could not commit changes, see ${_PATCH_LOG_FILE}"
 fi
 now_at
-stderr_echo "all done"
+vee "all done"

@@ -10,19 +10,27 @@ export GIT_AUTHOR_NAME
 export GIT_AUTHOR_EMAIL
 
 # the suffix to use for per-patch branches
-_GIT_BRANCH_SUFFIX="pl"
+_GIT_BRANCH_PREFIX="Patches/"
 
 # the timezone offset for commits, see git-commit(1) (search for DATE)
 _GIT_TZ_OFFSET="0000"
 
+# echo to stderr if verbose is set
+vee()
+{
+    if [ -n "${_VERBOSE}" ]; then
+	echo "$@" 1>&2
+    fi
+}
+
 # echo to stderr
-stderr_echo()
+ee()
 {
     echo "$@" 1>&2
 }
 
 # echo to stderr without newline
-stderr_echo_nonl()
+ee_nonl()
 {
     echo -n "$@" 1>&2
 }
@@ -30,7 +38,7 @@ stderr_echo_nonl()
 # print error and give up
 fail()
 {
-    stderr_echo "$@"
+    ee "$@"
     exit 127
 }
 
@@ -108,13 +116,15 @@ is_readable_dir()
 # show current /VERSION contents
 now_at()
 {
-    if [ -z "${_ROOT_DIR}" ]; then
-	fail "_ROOT_DIR not set, can't read version information"
+    if [ -n "${_VERBOSE}" ]; then
+	if [ -z "${_ROOT_DIR}" ]; then
+	    fail "_ROOT_DIR not set, can't read version information"
+	fi
+	
+	ee
+	head -2 "${_ROOT_DIR}/VERSION" 1>&2
+	ee
     fi
-    
-    stderr_echo
-    head -2 "${_ROOT_DIR}/VERSION" 1>&2
-    stderr_echo
 }
 
 # get the directory tree version
