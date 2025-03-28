@@ -6,8 +6,14 @@
 GIT_AUTHOR_NAME="2BSD contributors"
 GIT_AUTHOR_EMAIL="patches-2bsd@example.com"
 
+GIT_COMMITTER_NAME="2BSD contributors"
+GIT_COMMITTER_EMAIL="patches-2bsd@example.com"
+
 export GIT_AUTHOR_NAME
 export GIT_AUTHOR_EMAIL
+
+export GIT_COMMITTER_NAME
+export GIT_COMMITTER_EMAIL
 
 # the suffix to use for per-patch branches
 _GIT_BRANCH_PREFIX="Patches/"
@@ -145,7 +151,9 @@ set_git_author_date()
 {
     is_existent "${1}"
     GIT_AUTHOR_DATE=$(stat -f '%m' "${1}")" ${_GIT_TZ_OFFSET}"
-    export GIT_AUTHOR_DATE 
+    GIT_COMMITTER_DATE=${GIT_AUTHOR_DATE}
+    export GIT_AUTHOR_DATE
+    export GIT_COMMITTER_DATE
 }
 
 for _requirement in git patch ksh cpio; do
