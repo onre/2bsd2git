@@ -13,6 +13,8 @@ this thing is a work in progress so adjust expectations accordingly.
 known issues
 ~~~~~~~~~~~~
 
+- the cleanup could remove lots of other things without affecting patching
+  (prime example: catman pages)
 - the only piece of file metadata git stores is the executable bit
 - replicating the application recipe in patch2commit.sh is what it is
 
