@@ -2,7 +2,8 @@
 ~~~~~~~~
 
 a collection of small utilities for automatic transmogrification of
-2.11-BSD patches into git commits.
+2.11-BSD patches into git commits. it can also turn manpages into HTML
+if you have mandoc(1) installed. if not, get it from: https://mandoc.bsd.lv/
 
 status
 ~~~~~~
@@ -29,6 +30,10 @@ $ make
 
 subtargets
 ~~~~~~~~~~
+
+HTML manpages:
+
+$ make html-manpages
 
 apply a single patch:
 

@@ -2,11 +2,13 @@ ROOT_DIR	:= $(.CURDIR)/md/root
 DIST_DIR	:= $(.CURDIR)/newdist
 PATCH_DIR	:= $(.CURDIR)/patches
 TMP_DIR		:= $(.CURDIR)/md/tmp
+HTML_MAN_DIR	:= $(.CURDIR)/html
 
 .export ROOT_DIR
 .export DIST_DIR
 .export PATCH_DIR
 .export TMP_DIR
+.export HTML_MAN_DIR
 .export PATCH
 
 all: latest
@@ -79,3 +81,7 @@ apply:
 		echo "usage: make PATCH=<patchnum> apply"; exit 1; \
 	fi
 	./patch2commit.sh $${PATCH}
+
+# a naive dependency, but good enough
+html-manpages: $(ROOT_DIR)/.git
+	./manpages2html.sh
