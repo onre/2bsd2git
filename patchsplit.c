@@ -70,6 +70,11 @@ int main(int argc, char **argv) {
 	    }
 	}
     }
+
+    fclose(patchp);
+    fclose(diffp);
+    fclose(msgp);
+
     if (!msglines) {
 	eprintf("something is amiss - 0 message lines\n");
 	exit(-2);
